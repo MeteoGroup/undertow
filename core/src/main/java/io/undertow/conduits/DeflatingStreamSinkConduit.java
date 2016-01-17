@@ -18,16 +18,10 @@
 
 package io.undertow.conduits;
 
-import static org.xnio.Bits.allAreClear;
-import static org.xnio.Bits.allAreSet;
-import static org.xnio.Bits.anyAreSet;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.ClosedChannelException;
-import java.nio.channels.FileChannel;
-import java.util.concurrent.TimeUnit;
-import java.util.zip.Deflater;
+import io.undertow.UndertowLogger;
+import io.undertow.server.HttpServerExchange;
+import io.undertow.util.ConduitFactory;
+import io.undertow.util.Headers;
 import org.xnio.IoUtils;
 import org.xnio.Pooled;
 import org.xnio.XnioIoThread;
@@ -36,27 +30,24 @@ import org.xnio.channels.StreamSourceChannel;
 import org.xnio.conduits.ConduitWritableByteChannel;
 import org.xnio.conduits.Conduits;
 import org.xnio.conduits.StreamSinkConduit;
-import org.xnio.conduits.WriteReadyHandler;
 
-import io.undertow.UndertowLogger;
-import io.undertow.server.HttpServerExchange;
-import io.undertow.util.ConduitFactory;
-import io.undertow.util.Headers;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
+import java.nio.channels.FileChannel;
+import java.util.concurrent.TimeUnit;
+import java.util.zip.Deflater;
+
+import static org.xnio.Bits.*;
 
 /**
  * Channel that handles deflate compression
  *
  * @author Stuart Douglas
  */
-public class DeflatingStreamSinkConduit implements StreamSinkConduit {
+public class DeflatingStreamSinkConduit extends AbstractStreamSinkConduit implements StreamSinkConduit {
 
     protected final Deflater deflater;
-    private final ConduitFactory<StreamSinkConduit> conduitFactory;
-    private final HttpServerExchange exchange;
-
-    private StreamSinkConduit next;
-    private WriteReadyHandler writeReadyHandler;
-
 
     /**
      * The streams buffer. This is freed when the next is shutdown
@@ -81,10 +72,9 @@ public class DeflatingStreamSinkConduit implements StreamSinkConduit {
     }
 
     protected DeflatingStreamSinkConduit(final ConduitFactory<StreamSinkConduit> conduitFactory, final HttpServerExchange exchange, int deflateLevel) {
+        super(conduitFactory, exchange);
         deflater = new Deflater(deflateLevel, true);
         this.currentBuffer = exchange.getConnection().getBufferPool().allocate();
-        this.exchange = exchange;
-        this.conduitFactory = conduitFactory;
     }
 
     @Override
@@ -127,22 +117,7 @@ public class DeflatingStreamSinkConduit implements StreamSinkConduit {
         if (anyAreSet(state, SHUTDOWN | CLOSED) || currentBuffer == null) {
             throw new ClosedChannelException();
         }
-        try {
-            int total = 0;
-            for (int i = offset; i < offset + length; ++i) {
-                if (srcs[i].hasRemaining()) {
-                    int ret = write(srcs[i]);
-                    total += ret;
-                    if (ret == 0) {
-                        return total;
-                    }
-                }
-            }
-            return total;
-        } catch (IOException e) {
-            freeBuffer();
-            throw e;
-        }
+        return super.write(srcs, offset, length);
     }
 
     @Override
@@ -221,24 +196,6 @@ public class DeflatingStreamSinkConduit implements StreamSinkConduit {
         }
     }
 
-    private void queueWriteListener() {
-        exchange.getConnection().getIoThread().execute(new Runnable() {
-            @Override
-            public void run() {
-                if (writeReadyHandler != null) {
-                    try {
-                        writeReadyHandler.writeReady();
-                    } finally {
-                        //if writes are still resumed queue up another one
-                        if (next == null && isWriteResumed()) {
-                            queueWriteListener();
-                        }
-                    }
-                }
-            }
-        });
-    }
-
     @Override
     public void terminateWrites() throws IOException {
         deflater.finish();
@@ -274,11 +231,6 @@ public class DeflatingStreamSinkConduit implements StreamSinkConduit {
     }
 
     @Override
-    public void setWriteReadyHandler(final WriteReadyHandler handler) {
-        this.writeReadyHandler = handler;
-    }
-
-    @Override
     public boolean flush() throws IOException {
         if (currentBuffer == null) {
             if (anyAreSet(state, NEXT_SHUTDOWN)) {
@@ -310,7 +262,7 @@ public class DeflatingStreamSinkConduit implements StreamSinkConduit {
                             state |= WRITTEN_TRAILER;
                             byte[] data = getTrailer();
                             if (data != null) {
-                                if(additionalBuffer != null) {
+                                if (additionalBuffer != null) {
                                     byte[] newData = new byte[additionalBuffer.remaining() + data.length];
                                     int pos = 0;
                                     while (additionalBuffer.hasRemaining()) {
@@ -320,7 +272,7 @@ public class DeflatingStreamSinkConduit implements StreamSinkConduit {
                                         newData[pos++] = aData;
                                     }
                                     this.additionalBuffer = ByteBuffer.wrap(newData);
-                                } else if(anyAreSet(state, FLUSHING_BUFFER) && buffer.capacity() - buffer.remaining() >= data.length) {
+                                } else if (anyAreSet(state, FLUSHING_BUFFER) && buffer.capacity() - buffer.remaining() >= data.length) {
                                     buffer.compact();
                                     buffer.put(data);
                                     buffer.flip();
@@ -355,7 +307,7 @@ public class DeflatingStreamSinkConduit implements StreamSinkConduit {
                 }
             } finally {
                 if (nextCreated) {
-                    if (anyAreSet(state, WRITES_RESUMED) && !anyAreSet(state ,NEXT_SHUTDOWN)) {
+                    if (anyAreSet(state, WRITES_RESUMED) && !anyAreSet(state, NEXT_SHUTDOWN)) {
                         try {
                             next.resumeWrites();
                         } catch (Exception e) {
@@ -485,7 +437,8 @@ public class DeflatingStreamSinkConduit implements StreamSinkConduit {
         next.truncateWrites();
     }
 
-    private void freeBuffer() {
+    @Override
+    protected void freeBuffer() {
         if (currentBuffer != null) {
             currentBuffer.free();
             currentBuffer = null;

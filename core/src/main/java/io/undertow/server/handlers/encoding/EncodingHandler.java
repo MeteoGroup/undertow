@@ -31,12 +31,12 @@ import java.util.Set;
 
 /**
  * Handler that serves as the basis for content encoding implementations.
- * <p>
+ * <p/>
  * Encoding handlers are added as delegates to this handler, with a specified server side priority.
- * <p>
+ * <p/>
  * If a request comes in with no q value then then server will pick the handler with the highest priority
  * as the encoding to use, otherwise the q value will be used to determine the correct handler.
- * <p>
+ * <p/>
  * If no handler matches then the identity encoding is assumed. If the identity encoding has been
  * specifically disallowed due to a q value of 0 then the handler will set the response code
  * 406 (Not Acceptable) and return.
@@ -95,7 +95,7 @@ public class EncodingHandler implements HttpHandler {
         return this;
     }
 
-    public static class Builder  implements HandlerBuilder {
+    public static class Builder implements HandlerBuilder {
 
         @Override
         public String name() {
@@ -123,6 +123,7 @@ public class EncodingHandler implements HttpHandler {
                 @Override
                 public HttpHandler wrap(HttpHandler handler) {
                     return new EncodingHandler(handler, new ContentEncodingRepository()
+                            .addEncodingHandler("br", new BrotliEncodingProvider(), 200)
                             .addEncodingHandler("gzip", new GzipEncodingProvider(), 100)
                             .addEncodingHandler("deflate", new DeflateEncodingProvider(), 10));
                 }
