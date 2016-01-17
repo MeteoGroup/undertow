@@ -25,7 +25,7 @@ import io.undertow.util.ConduitFactory;
 import org.xnio.conduits.StreamSinkConduit;
 
 /**
- * Content coding for 'deflate'
+ * Content coding for 'gzip'
  *
  * @author Stuart Douglas
  */
