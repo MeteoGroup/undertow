@@ -1,18 +1,20 @@
-Undertow
-========
 
-Undertow is a Java web server based on non-blocking IO. It consists of a few different parts:
+# Undertow pimped with brotli compression support
 
-* A core HTTP server that supports both blocking and non-blocking IO
-* A Servlet 3.1 implementation
-* A JSR-356 compliant web socket implementation
+Experimental revise of [Undertow](http://undertow.io/)
+to provide Google's [brotli](https://github.com/google/brotli) compression.
 
-Website: http://undertow.io
+It uses [jbrotli](https://github.com/nitram509/jbrotli) Java implementation.
 
-Issues: https://issues.jboss.org/browse/UNDERTOW
 
-Project Lead: Stuart Douglas <sdouglas@redhat.com>
+##### Status of this project
 
-Mailing List: undertow-dev@lists.jboss.org
-http://lists.jboss.org/mailman/listinfo/undertow-dev
+❌ **CANCELED**
 
+The original idea was to improve Undertow code base with Brotli support.
+This idea was dropped in favor of a generic servlet filter implementation.
+
+If you wanna use Brotli compression in your web application, have a look
+at the [BrotliServletFilter](https://github.com/meteogroup/jbrotli) in jbrotli
+
+Now, this code is just meant for being there as learning exercise.
